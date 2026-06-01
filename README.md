@@ -85,6 +85,32 @@ for h in hits:
     print(h.score, h.metadata, h.content[:80])
 ```
 
+## 6. 小数据验证（跑通 pipeline）
+
+用 `data/` 下的示例文档（博士后管理、职工请假、差旅报销三篇不同主题）端到端验证一遍。
+
+```bash
+# 0) 启动本地模型服务（不走 Xinference 时用这个，从 models/ 加载权重）
+.venv/bin/python server.py            # 监听 0.0.0.0:9997，默认 CPU，有 GPU 自动用 cuda
+curl http://127.0.0.1:9997/health     # {"status":"ok","device":"cpu"} 即就绪
+
+# 1) 建索引：3 篇文档 -> 3 个 chunk -> FAISS 落盘到 index/
+.venv/bin/python -m rag_bge.indexer
+
+# 2) 查询：召回 Top-K -> reranker 精排 Top-N
+.venv/bin/python -m rag_bge.retriever "博士后出站需要什么"
+```
+
+跨主题查询应能把对应文档排到第一，干扰项分数被明显拉低，说明召回 + 精排链路正常：
+
+| 查询 | Top-1 命中 | rerank 分数 | 次高分（干扰项） |
+|---|---|---|---|
+| 博士后出站需要什么 | sample_postdoc.md | ~0.97 | ~0.02 |
+| 工作满15年有几天年假 | sample_leave.md | ~0.66 | ~0.003 |
+| 出差住宿费怎么报销 | sample_reimburse.md | ~0.90 | ~0.005 |
+
+> 示例文档较短，每篇约切成 1 个 chunk；换真实语料时按文档粒度调 `CHUNK_SIZE`（默认 512）。
+
 ## 模块说明
 
 | 文件 | 作用 |
